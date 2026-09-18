@@ -1876,7 +1876,7 @@ app.use((err, req, res, next) => {
 
 // ── start ─────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, "127.0.0.1", () => {
   console.log(`\n╔═══════════════════════════════════════════════╗`);
   console.log(`║  Fulcrum · SAP S/4HANA Cloud PE               ║`);
   console.log(`║  http://127.0.0.1:${PORT}                      ║`);
