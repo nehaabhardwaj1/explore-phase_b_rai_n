@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+kdd-generator/node_modules/
+bdcq-agent/node_modules/
+
+# Generated output
+output/
+bdcq/
+kdd/
+f2s/
+xlsx/
+
+# User-specific decisions
+decisions/
+
+# Large cache files
+kdd-cache.json
+
+# Notify config has email address
+notify/config.json
+
+# Migrated/temp files
+decisions.json.migrated
+
+# Catalog backups (timestamped)
+scope-catalog.backup.*.json
+
+# Logs
+*.log
+npm-debug.log*
+fulcrum-startup.log
+
+# Claude session data
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.suo
+*.user
+
+# Lock file (let each user generate their own)
+package-lock.json
