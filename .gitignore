@@ -13,8 +13,10 @@ xlsx/
 # User-specific decisions
 decisions/
 
-# Large cache files
+# Large cache / catalog files — each user generates their own via the extension
 kdd-cache.json
+scope-catalog.json
+scope-catalog-f2s.json
 
 # Notify config has email address
 notify/config.json
