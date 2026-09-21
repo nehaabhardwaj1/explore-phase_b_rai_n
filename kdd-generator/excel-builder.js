@@ -44,7 +44,7 @@ function buildExcel(allRows, meta) {
     // ── Workshop Outcome ──
     "Workshop Date","Decided By","Sign-off Status","Action Items","BPD Reference",
     // ── RICEF / Extensibility ──
-    "RICEF Title","RICEF Type","Extensibility Path","BTP Required","Effort Estimate"
+    "RICEF Title","RICEF Type","Extensibility Path","BTP Required","Effort Estimate","Complexity"
   ];
 
   const COL_WIDTHS = [
@@ -57,7 +57,7 @@ function buildExcel(allRows, meta) {
     // Workshop columns
     16,22,16,45,22,
     // RICEF columns
-    35,13,22,13,14
+    35,13,22,13,14,13
   ];
 
   const DISCLAIMER = [
@@ -105,7 +105,8 @@ function buildExcel(allRows, meta) {
       r.ricefType           || "None",
       r.extensibilityType   || "None",
       r.btpRequired         || "No",
-      r.effortEstimate      || "None"
+      r.effortEstimate      || "None",
+      r.complexity          || "Low"
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet([HEADERS, DISCLAIMER, ...data]);

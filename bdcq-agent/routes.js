@@ -116,6 +116,12 @@ function lobsToDomains(lobs, availableDomains) {
 // ROOT is two levels up from this file (bdcq-agent/ → explore-accelerator/)
 const ROOT = path.join(__dirname, "..");
 
+// ── Functional-team verified overrides (keyed by SAP ID) ─────────────────────
+const OVERRIDES_FILE = path.join(__dirname, "standards-overrides.json");
+function loadOverrides() {
+  try { return JSON.parse(fs.readFileSync(OVERRIDES_FILE, "utf8")); } catch { return {}; }
+}
+
 // ── Locate bdcq-questions.json ────────────────────────────────────────────────
 // Checked in priority order; first match wins.
 const SEARCH_PATHS = [
@@ -423,40 +429,45 @@ router.post("/enrich", express.json({ limit: "2mb" }), async (req, res) => {
     return res.json({ ok: true, enrichments: rawRows.map(() => ({ standardValue: "", watchOut: "" })) });
   }
 
-  // Build per-question reference block from the SAP-authored BDCQ data already
-  // present in the Excel rows. This grounds Claude in the real SAP standard values
-  // and watch-out points instead of having it generate them from scratch.
+  // Build per-question reference block — includes SSCUI ref + SAP ID so Claude
+  // can recall the exact pre-delivered configuration values from its training knowledge.
   const questionLines = rows.map((r, i) => {
     const question   = String(r[questionCol] || r["Question"] || "").trim().slice(0, 300);
     const topicDef   = getCol(r, "topic definition", "definition", "description").slice(0, 400);
-    const stdVal     = getCol(r, "sample value", "standard value", "standard values").slice(0, 600);
+    const stdVal     = getCol(r, "solution", "sample value", "standard value", "standard values").slice(0, 600);
     const watchOut   = getCol(r, "watch out", "constraint", "watch-out").slice(0, 500);
+    const sscui      = getCol(r, "sscui reference", "sscui", "configuration activity").slice(0, 150);
+    const sapId      = getCol(r, "sap id", "sapid", "id").slice(0, 20);
+    const topic      = getCol(r, "topic").slice(0, 100);
 
     let block = `${i + 1}. Question: ${question}`;
-    if (topicDef) block += `\n   SAP Context: ${topicDef}`;
+    if (topic)    block += `\n   Topic: ${topic}`;
+    if (sscui)    block += `\n   SSCUI: ${sscui}`;
+    if (sapId)    block += `\n   SAP ID: ${sapId}`;
+    if (topicDef) block += `\n   Context: ${topicDef}`;
     if (stdVal)   block += `\n   SAP Standard Value (from BDCQ): ${stdVal}`;
     if (watchOut) block += `\n   SAP Watch-Out (from BDCQ): ${watchOut}`;
     return block;
   }).join("\n\n");
 
   const hasRefData = rows.some(r =>
-    getCol(r, "sample value", "standard value") || getCol(r, "watch out", "constraint")
+    getCol(r, "solution", "sample value", "standard value") || getCol(r, "watch out", "constraint")
   );
 
-  const prompt = `You are an SAP S/4HANA Cloud Public Edition (Cloud PE) configuration expert.
-${hasRefData ? `
-The SAP-authored BDCQ reference data is included for each question (SAP Standard Value and Watch-Out Point columns from the source Excel).
-Your job is to CLEAN, CONSOLIDATE and REFORMAT that reference data — not to invent new content.
-- "standardValue": Rewrite the SAP Standard Value in 1–3 concise sentences. Name the Fiori app used to configure it. Keep specific values (codes, types, IDs).
-- "watchOut": Rewrite the Watch-Out / Constraints in 1–3 concise bullet points. Keep specific constraints. Remove repetition.
-If the reference data is empty for a question, derive the answer from SAP Cloud PE standards.` : `
-For each question provide:
-- "standardValue": SAP-standard default or recommended value for Cloud PE. Name the Fiori app. If client-specific, say "Client-specific — confirm in workshop".
-- "watchOut": Key constraints or irreversible decisions. Empty string "" if none.`}
+  const prompt = `You are an SAP S/4HANA Cloud Public Edition (Cloud PE) configuration consultant.
+
+For each question, use the Topic, SSCUI reference, and SAP ID provided to give the most specific answer you can from your SAP knowledge. Where you know specific pre-delivered codes, types, or IDs (e.g. document types, work item types, number ranges) include them. Where you are less certain, give the best Cloud PE guidance you can and name the relevant Fiori app.
+
+${hasRefData ? `Where SAP BDCQ reference data is provided, reformat it:
+- "standardValue": 1–3 concise sentences. Keep any specific codes/types. Name the Fiori app.
+- "watchOut": 1–3 bullet points of constraints. Remove repetition.
+Where reference data is absent for a question, use your SAP Cloud PE knowledge.` : `For each question:
+- "standardValue": Best available SAP Cloud PE standard or default. Include specific codes/types where known. Name the Fiori app. If genuinely client-specific, say "Client-specific — confirm in workshop".
+- "watchOut": Key constraints or irreversible decisions. Use "" if none.`}
 
 RULES — strictly enforced:
 - SAP S/4HANA Cloud Public Edition ONLY. No T-codes, SPRO, ABAP, SAP GUI, or on-premise references.
-- Return ONLY a valid JSON array — no markdown fences, no explanation outside the array.
+- ALWAYS return a valid JSON array — even if uncertain, return your best answer in JSON. Never refuse.
 - Array length MUST exactly match the number of questions (${rows.length}).
 
 Domain: ${domain}
@@ -486,7 +497,19 @@ Return format (one object per question, same order):
       return { standardValue: "", watchOut: "" };
     });
 
-    res.json({ ok: true, enrichments });
+    // Apply functional-team overrides — verified values always win over Claude
+    const overrides = loadOverrides();
+    const finalEnrichments = enrichments.map((e, i) => {
+      const sapId = String(rawRows[i]?.["SAP ID"] || rawRows[i]?.["SAP id"] || "").trim();
+      const ov = sapId && overrides[sapId];
+      if (!ov) return e;
+      return {
+        standardValue: ov.standardValue || e.standardValue,
+        watchOut:      ov.watchOut      || e.watchOut
+      };
+    });
+
+    res.json({ ok: true, enrichments: finalEnrichments });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

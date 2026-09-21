@@ -41,19 +41,17 @@ function detectUserEmail() {
   });
 }
 
-// Read cached config or detect live
+// Detect recipient — manual config.json overrides, otherwise always live from Outlook
 async function getRecipient() {
-  // Try saved config first
+  // Manual override only — never auto-created, so it can't carry over from another user
   try {
     const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
     if (cfg.email && cfg.email.includes("@")) return cfg.email;
   } catch { /**/ }
 
-  // Auto-detect from Outlook
+  // Always detect live from local Outlook — never cache to disk
   const detected = await detectUserEmail();
   if (detected) {
-    // Save so next call is instant
-    try { fs.writeFileSync(CONFIG_FILE, JSON.stringify({ email: detected }, null, 2)); } catch { /**/ }
     console.log(`[Fulcrum Notify] 👤 User detected: ${detected}`);
     return detected;
   }

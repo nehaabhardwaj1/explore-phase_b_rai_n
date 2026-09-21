@@ -2240,7 +2240,6 @@ async function pagEditor() {
               <th>Design Question</th>
               <th style="width:100px">Fit / Gap</th>
               <th style="width:115px">Resolution</th>
-              <th style="width:90px">Complexity</th>
               <th style="width:100px">Status</th>
               <th style="width:120px">Owner</th>
               <th style="width:80px"></th>
@@ -2728,11 +2727,6 @@ function bindEditor() {
           }
         </td>
         <td onclick="event.stopPropagation()">
-          <select class="cell-select" onchange="updateField('${r.kddId}','complexity',this.value)">
-            ${["Low","Medium","High"].map(v => `<option ${r.complexity===v?"selected":""}>${v}</option>`).join("")}
-          </select>
-        </td>
-        <td onclick="event.stopPropagation()">
           <select class="cell-select" onchange="updateField('${r.kddId}','status',this.value)">
             ${["Open","In Progress","Deferred","Approved","Decision Made","Closed"].map(v => `<option ${r.status===v?"selected":""}>${v}</option>`).join("")}
           </select>
@@ -2849,10 +2843,17 @@ function bindEditor() {
                   ? `<span style="color:var(--text-muted);font-weight:400;text-transform:none;font-size:11px">&nbsp;— disabled for Fit items</span>`
                   : `<span style="color:var(--text-muted);font-weight:400;text-transform:none;font-size:11px">&nbsp;— set Resolution &amp; Type in the table row above</span>`}
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;${r.fitGap === "Fit" ? "opacity:0.4;pointer-events:none;" : ""}">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;${r.fitGap === "Fit" ? "opacity:0.4;pointer-events:none;" : ""}">
                 <div>
                   <div class="expand-label">WRICEF ID</div>
                   <div class="expand-readonly" style="font-family:monospace;font-size:13px;color:var(--accent);font-weight:700">${r.ricefId || (r.gapResolution==="WRICEF"?"auto-assigned on type select":"—")}</div>
+                </div>
+                <div>
+                  <div class="expand-label">Complexity</div>
+                  <select class="expand-textarea" style="min-height:unset;padding:6px 8px;cursor:pointer"
+                    onchange="updateField('${r.kddId}','complexity',this.value)">
+                    ${["Low","Medium","High"].map(v => `<option ${(r.complexity||"Low")===v?"selected":""}>${v}</option>`).join("")}
+                  </select>
                 </div>
                 <div>
                   <div class="expand-label">Extensibility</div>
