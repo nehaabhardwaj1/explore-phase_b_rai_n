@@ -544,7 +544,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           const buf = await resp.arrayBuffer();
           if (buf.byteLength < 500) return { ok: false, error: 'Response too small (' + buf.byteLength + 'B) — likely auth redirect', origin: location.origin };
           const bytes = new Uint8Array(buf);
-          const CHUNK = 8192;
+          // CHUNK must be a multiple of 3: base64 encodes 3 bytes → 4 chars, so a
+          // non-multiple-of-3 chunk makes btoa emit '=' padding MID-STREAM, which
+          // corrupts the concatenation and makes atob() throw on the other side.
+          const CHUNK = 8190; // 8190 = 3 × 2730
           let b64 = '';
           for (let i = 0; i < bytes.length; i += CHUNK) {
             b64 += btoa(String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK, bytes.length))));
@@ -728,7 +731,12 @@ function fetchCatalogViaScript(tabId, respond) {
         func: async () => {
 
           // ── L1 domain derivation ─────────────────────────────────────────────
-          function deriveL1(l2) {
+          // name-based override runs first: SAP tags PS items as "Solutions for
+          // Specific Industries" or "Human Resources" in businessProcessGroupName,
+          // so pattern-matching on the scope item name is the reliable signal.
+          function deriveL1(l2, name) {
+            const n = (name || "").toLowerCase();
+            if (/project.based service|resource management for project|project billing|customer project management|internal project management|intercompany.*project|time recording.*project|staffing.*project/.test(n)) return "Professional Services";
             const t = (l2 || "").toLowerCase();
             if (/finance|accounting|treasury|tax|asset account|controlling|revenue|ledger|payment|invoice|receivable|payable|cash/.test(t)) return "Finance & Controlling";
             if (/procurement|purchasing|sourcing|supplier|vendor|ariba|spend/.test(t))                                                       return "Sourcing & Procurement";
@@ -813,13 +821,17 @@ function fetchCatalogViaScript(tabId, respond) {
 
           // ── Step 4a: KDD catalog — original format (id, lob, name, description) ──
           // Keeps raw HTML description so the KDD agent can parse it itself.
+          // lob: use name-based PS override — SAP tags PS items as "Solutions for
+          // Specific Industries" or "Human Resources" in businessProcessGroupName.
+          const PS_NAME_RE = /project.based service|resource management for project|project billing|customer project management|internal project management|intercompany.*project|time recording.*project|staffing.*project/i;
           const kddProcesses = rawList.map(p => {
             const nm   = p.name || "";
             const lp   = nm.lastIndexOf("(");
             const rp   = nm.lastIndexOf(")");
             const id   = (lp > 0 && rp > lp) ? nm.substring(lp+1, rp).trim() : (p.externalId || "");
             const name = lp > 0 ? nm.substring(0, lp).trim() : nm.trim();
-            return { description: p.description || "", id, lob: p.businessProcessGroupName || "Other", name };
+            const lob  = PS_NAME_RE.test(name) ? "Professional Services" : (p.businessProcessGroupName || "Other");
+            return { description: p.description || "", id, lob, name };
           }).filter(p => p.id);
 
           const kddCatalog = {
@@ -839,7 +851,7 @@ function fetchCatalogViaScript(tabId, respond) {
             const id   = (lp > 0 && rp > lp) ? nm.substring(lp+1, rp).trim() : (p.externalId || "");
             const name = lp > 0 ? nm.substring(0, lp).trim() : nm.trim();
             const l2   = p.businessProcessGroupName || "Other";
-            const l1   = deriveL1(l2);
+            const l1   = deriveL1(l2, name);
             const desc = parseDesc(p.description || "");
             return {
               id, name, l1, l2, l3: name,

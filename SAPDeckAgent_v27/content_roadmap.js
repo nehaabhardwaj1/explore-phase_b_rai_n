@@ -12,7 +12,9 @@
     if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + resp.statusText);
     const buf   = await resp.arrayBuffer();
     const bytes = new Uint8Array(buf);
-    const CHUNK = 8192;
+    // CHUNK must be a multiple of 3 — otherwise btoa emits '=' padding mid-stream
+    // per chunk and the concatenated base64 is invalid (atob throws downstream).
+    const CHUNK = 8190; // 8190 = 3 × 2730
     let b64 = '';
     for (let i = 0; i < bytes.length; i += CHUNK) {
       b64 += btoa(String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK, bytes.length))));

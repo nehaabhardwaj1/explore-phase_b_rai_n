@@ -1,33 +1,42 @@
 # Fulcrum — SAP S/4HANA Cloud Public Edition
 
 ## What This Is
-A Claude Code cartridge for the SAP Activate **Explore phase**, focused on KDD generation for S/4HANA Cloud Public Edition projects.
+A Claude Code cartridge for the SAP Activate **Explore phase**, covering BDCQ enrichment and KDD generation for S/4HANA Cloud Public Edition projects.
 
 ## Cartridge Structure
 ```
 explore-accelerator/
 ├── .claude/agents/
+│   ├── s4pc-bdcq-enricher.md   ← BDCQ Enricher skill (localization + industry)
 │   └── s4pc-kdd-generator.md   ← KDD Generator skill
 ├── kdd-generator/
 │   ├── helpers.js               ← RAG, phase, owner, effort, on-prem detection
 │   ├── excel-builder.js         ← Builds the 5-sheet XLSX output
 │   └── package.json             ← xlsx dependency
-├── SAPDeckAgent_BDCQ/           ← Chrome extension (install in Chrome)
-├── output/                      ← Generated Excel files land here
+├── SAPDeckAgent_v27/            ← Chrome extension (install in Chrome)
+├── bdcq/                        ← BDCQ Excel files + bdcq-questions.json (from extension)
+├── output/                      ← Generated files land here
 ├── scope-catalog.json           ← Saved from extension (update every 6 months)
 └── cartridge.json
 ```
 
 ## Skills Available
-| Skill | Invoke | Status |
+| Skill | Invoke | What it does |
 |---|---|---|
-| KDD Generator | `/s4pc-kdd-generator` | Active |
+| BDCQ Enricher | `/s4pc-bdcq-enricher` | Enriches SAP BDCQ questions with country localisation, industry context, and Cloud PE constraints — produces a workshop-ready brief |
+| KDD Generator | `/s4pc-kdd-generator` | Generates KDD log from scope catalog for given scope items — exports 5-sheet Excel |
 
 ## Setup (One Time)
-1. Install Chrome extension: Chrome → `chrome://extensions` → Load unpacked → pick `SAPDeckAgent_v26/`
+1. Install Chrome extension: Chrome → `chrome://extensions` → Load unpacked → pick `SAPDeckAgent_v27/`
 2. Run `npm install` in the `kdd-generator/` folder
-3. Open SAP for Me → extension → Load Full Catalog → Save to Cartridge
-   → `scope-catalog.json` appears in this folder
+3. **For BDCQ enrichment**: Open SAP Roadmap Viewer → Explore phase → Accelerators tab → extension → Scan → Save BDCQ Files → pick this folder → creates `bdcq/bdcq-questions.json`
+4. **For KDD generation**: Open SAP for Me Process Navigator → extension → Load Full Catalog → Save to Cartridge → creates `scope-catalog.json`
+
+## Running the BDCQ Enricher
+```
+/s4pc-bdcq-enricher
+```
+The agent reads `bdcq/bdcq-questions.json`, asks for client country and industry, then produces enriched workshop questions with mandatory localisation flags and Cloud PE constraints.
 
 ## Running the KDD Generator
 ```
@@ -41,6 +50,7 @@ Or with scope IDs and project details upfront:
 ## Data Files
 | File | What | How often |
 |---|---|---|
+| `bdcq/bdcq-questions.json` | Parsed BDCQ Excel files — all domains, all questions | Per project (download from Roadmap Viewer) |
 | `scope-catalog.json` | 657 SAP processes with descriptions, LOB, benefits | Every 6 months (new SAP release) |
 
 ## Output

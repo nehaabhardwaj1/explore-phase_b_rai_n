@@ -17,6 +17,20 @@ let bdcqDirHandle = null;
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
+// Verify (and re-request if needed) readwrite permission on a directory handle.
+// Returns true if permission is granted, false if the user denies or the handle
+// is irrecoverably stale. Callers should null the handle and re-pick on false.
+async function verifyPermission(handle) {
+  if (!handle) return false;
+  try {
+    const opts = { mode: "readwrite" };
+    if (await handle.queryPermission(opts) === "granted") return true;
+    return (await handle.requestPermission(opts)) === "granted";
+  } catch {
+    return false;
+  }
+}
+
 function expectedRelease() {
   const now = new Date();
   const yy  = String(now.getFullYear()).slice(-2);
@@ -34,6 +48,33 @@ function base64ToArrayBuffer(b64) {
   const bytes  = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
+}
+
+// Wait for SAP's SSO tab (accounts.sap.com/saml2…) to finish and close.
+// When the SAP session needs re-auth, SAP opens this tab to refresh the SAML
+// assertion; until it settles, file fetches return an auth-redirect HTML page.
+// Returns true once the SSO tab has appeared and then gone (session now fresh),
+// or false if no SSO was in progress. This is what a manual browser refresh does.
+async function waitForSsoTabToClose(maxMs = 30000) {
+  const start = Date.now();
+  let sawSso = false;
+  const hasSsoTab = async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.some(t => t.url && /accounts\.sap\.com\/saml2/i.test(t.url));
+  };
+  while (Date.now() - start < maxMs) {
+    if (await hasSsoTab()) {
+      sawSso = true;
+    } else if (sawSso) {
+      // Was mid-SSO, now gone → give cookies a beat to settle, then done.
+      await new Promise(r => setTimeout(r, 800));
+      return true;
+    } else if (Date.now() - start > 3000) {
+      return false; // never appeared within 3s → no SSO in progress
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return sawSso; // timed out — report whether SSO was seen
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -180,6 +221,9 @@ document.getElementById("btnSaveCartridge").addEventListener("click", async () =
 
   try {
     // ── Step 1: Pick / reuse folder ──────────────────────────────────────────
+    if (cartridgeDirHandle && !(await verifyPermission(cartridgeDirHandle))) {
+      cartridgeDirHandle = null; // permission lapsed — re-pick below
+    }
     if (!cartridgeDirHandle) {
       cartridgeDirHandle = await window.showDirectoryPicker({
         id: "explore-accelerator", mode: "readwrite", startIn: "desktop"
@@ -548,6 +592,9 @@ async function handleDownloadBDCQ() {
   }
 
   // ── Step 1: pick a folder if we don't have one yet ───────────────────────
+  if (bdcqDirHandle && !(await verifyPermission(bdcqDirHandle))) {
+    bdcqDirHandle = null; // permission lapsed — re-pick below
+  }
   if (!bdcqDirHandle) {
     try {
       bdcqDirHandle = await window.showDirectoryPicker({ id: 'bdcq-save', mode: 'readwrite' });
@@ -600,6 +647,15 @@ async function handleDownloadBDCQ() {
     } catch (e) {
       console.warn('Could not create xlsx/ subfolder, saving to root:', e);
     }
+  }
+
+  // ── Pre-check: if SAP SSO is already mid-flight, wait for it to settle ────────
+  // Otherwise the first file fetch hits an auth-redirect and cascades to the
+  // slow SSO-tab fallback. Only waits when a saml2 tab is actually open now.
+  const preTabs = await chrome.tabs.query({});
+  if (preTabs.some(t => t.url && /accounts\.sap\.com\/saml2/i.test(t.url))) {
+    pct.textContent = "Waiting for SAP SSO to finish…";
+    await waitForSsoTabToClose(30000);
   }
 
   for (let i = 0; i < total; i++) {
@@ -696,7 +752,45 @@ async function handleDownloadBDCQ() {
               }
             }
 
-            // Final check — if still not a valid XLSX after all 3 strategies, throw
+            // ── Strategy 3b: SSO settled — retry now that the session is fresh ──
+            // navigateAndCaptureSapFile just triggered a SAML refresh (the SSO
+            // tab in the screenshot). Once that tab closes the session cookie is
+            // fresh, so retry the fetch instead of failing and forcing the user
+            // to manually refresh the browser and run again.
+            if (!(bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4B)) {
+              const ssoSettled = await waitForSsoTabToClose(30000);
+              if (ssoSettled) {
+                pct.textContent = `⟳ Retry after SSO ${i + 1}/${total}: ${short}…`;
+                // 1) direct fetch (popup — host_permissions CORS bypass)
+                try {
+                  const respR = await fetch(f.url, { credentials: 'include' });
+                  if (respR.ok) {
+                    const abR = await respR.arrayBuffer();
+                    const bR  = new Uint8Array(abR);
+                    if (bR.length > 4 && bR[0] === 0x50 && bR[1] === 0x4B) { arrayBuf = abR; bytes = bR; }
+                  }
+                } catch (_) {}
+                // 2) same-site frame fetch if direct still didn't yield an XLSX
+                if (!(bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4B)) {
+                  const retryFrame = await new Promise(resolve => {
+                    chrome.runtime.sendMessage(
+                      { action: 'fetchFileBytes', url: f.url, tabId: activeTabId },
+                      res => resolve(chrome.runtime.lastError ? { ok: false } : (res || { ok: false }))
+                    );
+                    setTimeout(() => resolve({ ok: false }), 35000);
+                  });
+                  if (retryFrame.ok && retryFrame.base64) {
+                    try {
+                      const rBuf   = base64ToArrayBuffer(retryFrame.base64);
+                      const rBytes = new Uint8Array(rBuf);
+                      if (rBytes.length > 4 && rBytes[0] === 0x50 && rBytes[1] === 0x4B) { arrayBuf = rBuf; bytes = rBytes; }
+                    } catch (_) {}
+                  }
+                }
+              }
+            }
+
+            // Final check — if still not a valid XLSX after all strategies, throw
             if (!(bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4B)) {
               const isSsoTimeout = (freshResult?.error || '').toLowerCase().includes('timeout') ||
                                    (frameResult?.error  || '').toLowerCase().includes('auth');
