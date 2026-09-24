@@ -7,6 +7,7 @@ const path    = require("path");
 const fs      = require("fs");
 const os      = require("os");
 const { spawn, execSync } = require("child_process");
+const { rowMatchesScope } = require("./scope-match");
 const router  = express.Router();
 
 const isWin          = process.platform === "win32";
@@ -729,10 +730,11 @@ router.post("/preview", express.json({ limit: "512kb" }), (req, res) => {
           if (h && !headerSet.has(h)) { headerSet.add(h); allHeaders.push(h); }
         });
         for (const row of (sheet.rows || [])) {
-          if (scopeSet.size > 0) {
-            const values = Object.values(row).map(v => String(v || "").toUpperCase().trim());
-            if (!values.some(v => scopeSet.has(v))) continue;
-          }
+          // A Scope Ref cell holds a LIST ("BD9, 2EQ, I9I"), so comparing the
+          // whole cell against one id skipped every multi-item row. Shared
+          // with bdcq-builder.js: the two copies of this test were identical
+          // and would have drifted the moment either was edited.
+          if (!rowMatchesScope(row, scopeSet)) continue;
           allRows.push({
             Module: domainName,
             Section: sheetName,
