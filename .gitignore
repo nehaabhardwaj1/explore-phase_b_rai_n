@@ -47,3 +47,9 @@ desktop.ini
 
 # Lock file (let each user generate their own)
 package-lock.json
+
+# Build output. Was tracked, duplicating the whole source tree: every
+# .js existed twice and a fix applied to one copy silently missed the
+# other. Rebuild with build.ps1 instead.
+dist/
+node_modules/

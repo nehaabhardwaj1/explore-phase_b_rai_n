@@ -4,6 +4,7 @@
 "use strict";
 
 const XLSX = require("../kdd-generator/node_modules/xlsx");
+const { rowMatchesScope } = require("./scope-match");
 const path = require("path");
 const fs   = require("fs");
 
@@ -83,11 +84,11 @@ function buildBDCQExcel({
 
       // Row filter ─────────────────────────────────────────────────────────────
       for (const row of (sheet.rows || [])) {
-        if (scopeSet.size > 0) {
-          // At least one cell value must match a requested scope ID
-          const values = Object.values(row).map(v => String(v || "").toUpperCase().trim());
-          if (!values.some(v => scopeSet.has(v))) continue;
-        }
+        // A Scope Ref cell holds a LIST ("BD9, 2EQ, I9I"), so comparing the
+        // whole cell against one id skipped every multi-item row. Shared with
+        // routes.js: the two copies of this test were identical and would have
+        // drifted the moment either was edited.
+        if (!rowMatchesScope(row, scopeSet)) continue;
         allRows.push({ Module: domainName, Section: sheetName, ...row });
       }
     }
