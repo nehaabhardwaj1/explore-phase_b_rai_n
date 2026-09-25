@@ -1112,14 +1112,19 @@ async function pagSettings() {
       ${catalogCard}
 
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-        <div class="bold text-sm mb-2" style="color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">How to reload fresh data from SAP for Me</div>
-        <ol style="font-size:13px;color:var(--text);line-height:2.1;padding-left:18px;margin-bottom:16px">
-          <li>Open Chrome → go to <code style="background:#f3f4f6;padding:1px 6px;border-radius:3px">me.sap.com/processnavigator</code></li>
-          <li>Click the <strong>SAP Deck Agent</strong> extension icon</li>
-          <li>Click <strong>Load Full Catalog</strong> <span class="text-muted text-sm">(this refreshes all 657 processes from SAP)</span></li>
-          <li>Click <strong>📁 Save to Cartridge</strong> → select this project folder</li>
-          <li>Come back here and click <strong>Reload Catalog</strong> below</li>
-        </ol>
+        <div class="bold text-sm mb-2" style="color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">How this catalogue is refreshed</div>
+        <p style="font-size:13px;color:var(--text);line-height:1.8;margin:0 0 10px">
+          It is generated from the S4PC brain, from SAP's own EAXService OData API, and
+          refreshes automatically with the monthly brain refresh. Nothing to do by hand.
+        </p>
+        <p style="font-size:13px;color:var(--text-muted);line-height:1.8;margin:0 0 14px">
+          To refresh it now, on the brain host:
+          <code style="background:#f3f4f6;padding:1px 6px;border-radius:3px">python3.11 scripts/export_scope_catalog.py --out &lt;this folder&gt;/scope-catalog.json</code>
+          — the server picks it up straight away, no restart.
+          <br><strong>Clear</strong> and <strong>Upload</strong> below replace that generated file,
+          losing the release version and provenance with it. Use them only on a host with no
+          brain access; otherwise re-run the exporter.
+        </p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" id="reload-btn" onclick="reloadCatalog()">
             🔄 Reload Catalog
