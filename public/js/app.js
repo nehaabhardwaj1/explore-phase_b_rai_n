@@ -4322,7 +4322,18 @@ async function pagBDCQ() {
     </div>
 
     <div class="card">
-      <div class="card-title">Configuration</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div class="card-title" style="margin:0">Configuration</div>
+        <!-- The setup survives a reload on purpose: losing a carefully built
+             configuration to a stray refresh is worse than seeing it again.
+             But there was no way to say "different project" short of closing
+             the tab, so a returning user met the last run's client, scope and
+             countries with nothing offering to clear them. -->
+        <button class="btn btn-outline btn-sm" style="font-size:12px;padding:4px 10px;white-space:nowrap"
+          onclick="bdcqStartNewRun()" title="Clear the saved setup and start from empty">
+          ✚ Start new run
+        </button>
+      </div>
 
       <div class="section-divider">Project Details</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -4726,6 +4737,31 @@ function bindBDCQ() {
       sessionStorage.setItem("fulcrum-bdcq-state", JSON.stringify(state));
     } catch { /**/ }
   }
+
+  /* Clear the saved setup and the form with it.
+     Confirms first: the whole point of persisting is that people do not lose
+     this by accident, so a one-click wipe would reintroduce the problem from
+     the other side. */
+  window.bdcqStartNewRun = () => {
+    if (!confirm("Clear the saved setup and start a new run? Client, scope items, industry, domains and countries will all be reset.")) return;
+    try { sessionStorage.removeItem("fulcrum-bdcq-state"); } catch { /**/ }
+    ["bdcq-client", "bdcq-scope", "bdcq-overview"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    const ind = document.getElementById("bdcq-industry");
+    if (ind) ind.selectedIndex = 0;
+    // The Find Domains verdict belongs to the scope ids just cleared; leaving
+    // it would report on a field that is now empty.
+    const lookup = document.getElementById("bdcq-scope-lookup-result");
+    if (lookup) lookup.innerHTML = "";
+    document.querySelectorAll(".bdcq-domain-check, .bdcq-country-check, .bdcq-enrich-country")
+      .forEach(cb => { cb.checked = false; });
+    // Columns are derived from the selected domains, so they have to be
+    // re-rendered rather than left showing the previous run's set.
+    if (typeof renderColsForDomains === "function") renderColsForDomains();
+    bdcqSaveState();
+  };
 
   function bdcqRestoreState() {
     try {
